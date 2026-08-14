@@ -1,0 +1,19 @@
+{
+  "name": "ΡΟΔΙΟΣ - Αιτήματα Πολιτών",
+  "short_name": "ΡΟΔΙΟΣ",
+  "description": "Εφαρμογή για υποβολή και διαχείριση αιτημάτων πολιτών προς υπηρεσίες αυτεπιστασίας στη Ρόδο.",
+  "id": "/rodios-aitimata-entoles/aitimata/",
+  "start_url": "/rodios-aitimata-entoles/aitimata/",
+  "scope": "/rodios-aitimata-entoles/aitimata/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a2744",
+  "theme_color": "#1a2744",
+  "lang": "el",
+  "icons": [
+    {"src": "../assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "../assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable"},
+    {"src": "../assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "../assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

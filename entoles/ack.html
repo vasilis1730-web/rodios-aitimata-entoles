@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Δήλωση Ολοκλήρωσης Εργασίας</title>
+  <script src="../config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body{font-family:system-ui,'Segoe UI',sans-serif;background:#f3f1ec;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;color:#1a1a1a;padding:18px}
+    .card{max-width:520px;width:100%;background:white;border:1px solid #d8d4cc;border-radius:14px;box-shadow:0 10px 35px rgba(0,0,0,.12);padding:26px;text-align:center}
+    h1{font-size:20px;color:#1a3a5c;margin:0 0 10px}.muted{color:#666;font-size:13px;line-height:1.5}.ok{color:#166534;font-weight:800}.err{color:#991b1b;font-weight:800}
+    button{margin-top:18px;background:#1a3a5c;color:#fff;border:none;border-radius:8px;padding:12px 18px;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:default}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>ΡΟΔΙΟΣ — Δήλωση Ολοκλήρωσης</h1>
+    <p id="msg" class="muted">Έλεγχος συνδέσμου...</p>
+    <button id="btn" style="display:none">Επιβεβαίωση ολοκλήρωσης</button>
+  </div>
+
+<script>
+const SUPABASE_URL = String(window.RODIOS_CONFIG.supabaseUrl || '').replace(/\/+$/, '');
+const SUPABASE_KEY = String(window.RODIOS_CONFIG.supabaseAnonKey || '').trim();
+const sb = SUPABASE_URL && SUPABASE_KEY ? supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+const token = new URLSearchParams(location.search).get('token');
+const msgContainer = document.getElementById('msg');
+const btn = document.getElementById('btn');
+
+// Helper function για ασφαλή εισαγωγή μηνυμάτων (XSS Protection).
+// Δεν εισάγουμε ποτέ άγνωστα δεδομένα στο DOM με innerHTML.
+function setMessage(type, mainText, detailText = '') {
+  msgContainer.textContent = '';
+  const span = document.createElement('span');
+  span.className = type === 'error' ? 'err' : (type === 'ok' ? 'ok' : '');
+  span.textContent = mainText || '';
+  msgContainer.appendChild(span);
+
+  if (detailText) {
+    msgContainer.appendChild(document.createElement('br'));
+    msgContainer.appendChild(document.createTextNode(String(detailText)));
+  }
+}
+
+if (!sb) {
+  setMessage('error', 'Η νέα βάση δεν έχει ρυθμιστεί ακόμη.', 'Συμπληρώστε πρώτα το config.js της νέας εγκατάστασης.');
+} else if (!token) {
+  setMessage('error', 'Μη έγκυρος σύνδεσμος.', 'Δεν βρέθηκε κωδικός επιβεβαίωσης.');
+} else {
+  msgContainer.textContent = 'Πατήστε επιβεβαίωση μόνο εφόσον η εργασία της εντολής έχει ολοκληρωθεί.';
+  btn.style.display = 'inline-block';
+}
+
+btn.addEventListener('click', async () => {
+  if(!sb) return;
+  btn.disabled = true;
+  btn.textContent = 'Καταχώριση...';
+
+  try {
+    const {data, error} = await sb.rpc('complete_work_order_ack', {p_token: token});
+
+    if (error) {
+      setMessage('error', 'Δεν έγινε η καταχώριση.', error.message || 'Άγνωστο σφάλμα.');
+      btn.disabled = false;
+      btn.textContent = 'Προσπαθήστε ξανά';
+      return;
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || !row.success) {
+      setMessage('error', 'Ο σύνδεσμος δεν αντιστοιχεί σε ενεργή εντολή.');
+      btn.style.display = 'none';
+      return;
+    }
+
+    const dt = row.acknowledged_at ? new Date(row.acknowledged_at).toLocaleString('el-GR') : '—';
+    setMessage('ok', 'Η δήλωση ολοκλήρωσης καταχωρήθηκε επιτυχώς.', `Εντολή: ${row.order_num || '—'} | Χρόνος: ${dt}`);
+    btn.style.display = 'none';
+  } catch (err) {
+    console.error('ACK network/runtime error:', err);
+    setMessage('error', 'Σφάλμα δικτύου.', 'Ελέγξτε τη σύνδεσή σας και δοκιμάστε ξανά.');
+    btn.disabled = false;
+    btn.textContent = 'Προσπαθήστε ξανά';
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+project_id = "rodios-aitimata-entoles"
+
+[functions.citizen-bridge]
+verify_jwt = false
+
+[functions.verify-pdf-signatures]
+verify_jwt = true
+
+[functions.admin-delete]
+verify_jwt = true
+
+[functions.send-order-email]
+verify_jwt = true
+
+[functions.manage-app-user]
+verify_jwt = true
+
+[functions.resolve-maps-link]
+verify_jwt = false
