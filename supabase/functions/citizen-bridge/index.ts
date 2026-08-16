@@ -71,6 +71,30 @@ function cleanAttachments(value: unknown, uid: string): Array<Record<string, unk
   });
 }
 
+// Η συγκατάθεση του πολίτη για απάντηση, καθαρισμένη στον διακομιστή.
+// Ο browser δεν μπορεί να δηλώσει κανάλι που δεν αναγνωρίζουμε, ούτε να
+// περάσει email χωρίς να έχει ζητήσει ρητά απάντηση μέσω email.
+const REPLY_CHANNELS = ['email', 'viber', 'whatsapp'] as const;
+
+function cleanReplyPreference(supplied: Record<string, unknown>): {
+  optIn: boolean; channels: string[]; email: string;
+} {
+  const optIn = supplied.replyOptIn === true;
+  if(!optIn) return {optIn: false, channels: [], email: ''};
+
+  const raw = Array.isArray(supplied.replyChannels) ? supplied.replyChannels : [];
+  const channels = REPLY_CHANNELS.filter(c => raw.includes(c));
+
+  let email = '';
+  if(channels.includes('email')) {
+    const candidate = String(supplied.citizenEmail || '').trim().toLowerCase().slice(0, 254);
+    if(/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(candidate)) email = candidate;
+  }
+  // Ζητήθηκε email αλλά δεν δόθηκε έγκυρο -> το κανάλι πέφτει.
+  const final = email ? channels : channels.filter(c => c !== 'email');
+  return {optIn: final.length > 0, channels: final, email};
+}
+
 Deno.serve(async (req: Request) => {
   const options = handleOptions(req);
   if(options) return options;
@@ -105,6 +129,7 @@ Deno.serve(async (req: Request) => {
 
   if(action === 'submit') {
     const supplied = (body.issue && typeof body.issue === 'object') ? body.issue as Record<string, unknown> : {};
+    const reply = cleanReplyPreference(supplied);
     const id = `cit_${crypto.randomUUID().replaceAll('-', '')}`;
     const now = new Date();
     const local = rhodesLocalDateTime(now);
@@ -122,7 +147,10 @@ Deno.serve(async (req: Request) => {
       citizenAddr: '',
       citizenMobile: phone,
       citizenPhone: phone,
-      citizenEmail: '',
+      citizenEmail: reply.email,
+      replyOptIn: reply.optIn,
+      replyChannels: reply.channels,
+      replies: [],
       contactInfo: `📱 ${phone}`,
       location: String(supplied.location || '').slice(0, 500),
       municipality: String(supplied.municipality || '').slice(0, 160),
@@ -178,6 +206,10 @@ Deno.serve(async (req: Request) => {
       mapLat: supplied.mapLat ?? null,
       mapLng: supplied.mapLng ?? null,
       attachments: cleanAttachments(supplied.attachments, uid),
+      ...(() => {
+        const r = cleanReplyPreference(supplied);
+        return {citizenEmail: r.email, replyOptIn: r.optIn, replyChannels: r.channels};
+      })(),
       lastModifiedAt: new Date().toISOString()
     };
     const {data, error} = await service.from('rodios_issues').update({data: updated}).eq('id', id).select('id,data').single();

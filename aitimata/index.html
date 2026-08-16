@@ -101,6 +101,13 @@
   input,select,textarea{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:9px;font-size:15px;font-family:inherit;background:#fff;color:#1e293b;}
   input:focus,select:focus,textarea:focus{outline:none;border-color:#16a34a;}
   textarea{resize:vertical;min-height:90px;}
+  /* Προαιρετική απάντηση από την υπηρεσία */
+  .reply-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;margin-bottom:14px;}
+  .reply-box input[type=checkbox]{width:auto;flex:0 0 auto;padding:0;accent-color:#16a34a;transform:scale(1.2);}
+  .reply-box .chk{display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin:0;}
+  .reply-box .chk span{font-size:13px;font-weight:700;color:#15803d;line-height:1.35;}
+  .reply-ch{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px;}
+  .reply-ch label{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#334155;margin:0;cursor:pointer;}
   #loginScreen{position:fixed;inset:0;background:linear-gradient(135deg,#16a34a,#15803d);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100;}
   .login-box{background:#fff;border-radius:16px;padding:28px 22px;max-width:400px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.25);}
   .login-logo{text-align:center;margin-bottom:18px;}
@@ -296,6 +303,30 @@
       </button>
       <div class="muted" style="font-size:11px;margin-top:6px;">Εικόνες, PDF, Word, Excel, κείμενο ή zip — έως 50MB το καθένα. Στο κινητό μπορείτε να τραβήξετε φωτογραφία απευθείας.</div>
       <div id="attList" style="margin-top:8px;"></div>
+    </div>
+
+    <!-- ΠΡΟΑΙΡΕΤΙΚΗ ΑΠΑΝΤΗΣΗ ΑΠΟ ΤΗΝ ΥΠΗΡΕΣΙΑ -->
+    <div class="reply-box">
+      <label class="chk" for="i_replyOptIn">
+        <input id="i_replyOptIn" type="checkbox" onchange="toggleReplyOpts()">
+        <span>✉️ Θέλω απάντηση από την υπηρεσία</span>
+      </label>
+      <div id="replyOpts" class="hidden" style="margin-top:10px;">
+        <label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px;">Πώς θέλετε να σας απαντήσουμε;</label>
+        <div class="reply-ch">
+          <label><input id="i_replyEmailCh" type="checkbox" onchange="toggleReplyOpts()"> ✉ Email</label>
+          <label><input id="i_replyViberCh" type="checkbox"> 📲 Viber</label>
+          <label><input id="i_replyWhatsCh" type="checkbox"> 💬 WhatsApp</label>
+        </div>
+        <div id="replyEmailWrap" class="hidden" style="margin-top:10px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:5px;">Το email σας</label>
+          <input id="i_replyEmail" type="email" inputmode="email" autocomplete="email" placeholder="onoma@example.com">
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:8px;line-height:1.45;">
+          Τα στοιχεία χρησιμοποιούνται <strong>αποκλειστικά</strong> για την απάντηση σε αυτό το αίτημα.
+          Το Viber / WhatsApp αποστέλλεται στο κινητό με το οποίο συνδεθήκατε.
+        </div>
+      </div>
     </div>
 
     <button id="saveBtn" class="btn btn-primary" onclick="saveIssue()">📤 Υποβολή Αιτήματος</button>
@@ -706,7 +737,21 @@ function resetForm(){
   document.getElementById('i_title').innerHTML='<option value="">— Επιλέξτε πρώτα κατηγορία —</option>';
   document.getElementById('coordsDisplay').textContent='';
   document.getElementById('mapsPasteDiv').classList.add('hidden');
+  ['i_replyOptIn','i_replyEmailCh','i_replyViberCh','i_replyWhatsCh'].forEach(id=>{const e=document.getElementById(id);if(e)e.checked=false;});
+  const _re=document.getElementById('i_replyEmail'); if(_re) _re.value='';
+  toggleReplyOpts();
   pendingAttachments=[]; renderAttachments();
+}
+
+// Δείχνει/κρύβει τις επιλογές απάντησης. Το πεδίο email εμφανίζεται μόνο όταν
+// ο πολίτης επιλέξει πράγματι το κανάλι Email.
+function toggleReplyOpts(){
+  const box=document.getElementById('i_replyOptIn');
+  if(!box) return;
+  const on=box.checked;
+  document.getElementById('replyOpts').classList.toggle('hidden', !on);
+  const wantEmail=on && document.getElementById('i_replyEmailCh').checked;
+  document.getElementById('replyEmailWrap').classList.toggle('hidden', !wantEmail);
 }
 
 function openNewIssue(){
@@ -732,6 +777,14 @@ function startEdit(id){
   document.getElementById('i_desc').value=iss.description||'';
   document.getElementById('i_mapLat').value=iss.mapLat||'';
   document.getElementById('i_mapLng').value=iss.mapLng||'';
+  // επιλογές απάντησης, όπως τις είχε δηλώσει ο πολίτης
+  const _chs=Array.isArray(iss.replyChannels)?iss.replyChannels:[];
+  document.getElementById('i_replyOptIn').checked=!!iss.replyOptIn;
+  document.getElementById('i_replyEmailCh').checked=_chs.indexOf('email')>=0;
+  document.getElementById('i_replyViberCh').checked=_chs.indexOf('viber')>=0;
+  document.getElementById('i_replyWhatsCh').checked=_chs.indexOf('whatsapp')>=0;
+  document.getElementById('i_replyEmail').value=iss.citizenEmail||'';
+  toggleReplyOpts();
   // carry existing attachments into the edit form
   pendingAttachments=(iss.attachments||[]).map(a=>({_id:'att_'+genId(),name:a.name,type:a.type,size:a.size,url:a.url,path:a.path,uploading:false}));
   renderAttachments();
@@ -761,7 +814,18 @@ function startEdit(id){
 function showDisclaimer(){ document.getElementById('disclaimerModal').classList.add('show'); }
 
 function collectForm(){
+  const wantsReply=document.getElementById('i_replyOptIn').checked;
+  const channels=!wantsReply?[]:[
+    document.getElementById('i_replyEmailCh').checked?'email':null,
+    document.getElementById('i_replyViberCh').checked?'viber':null,
+    document.getElementById('i_replyWhatsCh').checked?'whatsapp':null
+  ].filter(Boolean);
   return {
+    replyOptIn:wantsReply,
+    replyChannels:channels,
+    // Το email κρατιέται μόνο αν ζητήθηκε πράγματι απάντηση μέσω email.
+    replyEmail:channels.indexOf('email')>=0
+      ? document.getElementById('i_replyEmail').value.trim().toLowerCase() : '',
     name:document.getElementById('i_name').value.trim(),
     unit:document.getElementById('i_unit').value,
     cat:document.getElementById('i_cat').value,
@@ -778,6 +842,12 @@ async function saveIssue(){
   if(pendingAttachments.some(a=>a.uploading)){ toast('⏳ Περιμένετε να ολοκληρωθεί η μεταφόρτωση.'); return; }
   const f=collectForm();
   if(!f.name||!f.desc||!f.unit||!f.cat||!f.title||!f.loc){ toast('Συμπληρώστε τα υποχρεωτικά πεδία (*): Ονοματεπώνυμο, Κοινότητα, Κατηγορία, Τίτλος, Τοποθεσία, Περιγραφή'); return; }
+  if(f.replyOptIn){
+    if(!f.replyChannels.length){ toast('Επιλέξτε τουλάχιστον έναν τρόπο για να σας απαντήσουμε.'); return; }
+    if(f.replyChannels.indexOf('email')>=0 && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(f.replyEmail)){
+      toast('Συμπληρώστε έγκυρο email για να λάβετε απάντηση.'); return;
+    }
+  }
   const btn=document.getElementById('saveBtn');
   btn.disabled=true; const oldTxt=btn.textContent; btn.textContent='⏳ Αποστολή...';
 
@@ -834,7 +904,11 @@ function buildIssue(f, ref, modifiesRef, description){
     time:new Date().toTimeString().slice(0,5),
     receiptMethod:'Αίτημα Πολίτη',
     citizenName:f.name||'', citizenAddr:'',
-    citizenMobile:currentPhone, citizenPhone:currentPhone, citizenEmail:'',
+    citizenMobile:currentPhone, citizenPhone:currentPhone, citizenEmail:f.replyEmail||'',
+    // Ρητή συγκατάθεση του πολίτη για απάντηση, και μέσω ποιων καναλιών.
+    replyOptIn:!!f.replyOptIn,
+    replyChannels:f.replyChannels||[],
+    replies:[],
     contactInfo:'📱 '+currentPhone,
     location:f.loc, municipality:f.unit, category:f.cat, title:f.title,
     description:description||'',

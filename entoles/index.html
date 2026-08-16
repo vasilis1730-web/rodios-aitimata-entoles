@@ -129,6 +129,10 @@ tr:hover td{background:#faf9f7;}
 .mclose:hover{background:var(--sec);}
 .mbody{padding:18px;}
 .mfoot{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:7px;}
+/* Μικρό κουμπί απάντησης δίπλα στον αριθμό του πολίτη */
+.reply-dot{display:inline-flex;align-items:center;justify-content:center;margin-left:6px;width:20px;height:20px;padding:0;border:1px solid #86efac;background:#dcfce7;color:#166534;border-radius:5px;font-size:11px;line-height:1;cursor:pointer;vertical-align:middle;}
+.reply-dot:hover{background:#bbf7d0;}
+.crep-row{border:1px solid var(--border);border-left:3px solid #16a34a;border-radius:6px;padding:7px 9px;margin-bottom:6px;font-size:11px;background:#fafafa;}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .fg{display:flex;flex-direction:column;gap:3px;}
 .fg.full{grid-column:1/-1;}
@@ -1031,6 +1035,33 @@ function hideDisclaimerModal(){
       <input type="hidden" id="p_id">
     </div>
     <div class="mfoot"><button class="btn" onclick="closeM('payModal')">Ακύρωση</button><button class="btn btn-p" onclick="savePayment()">Αποθήκευση</button></div>
+  </div>
+</div>
+
+<!-- ═══════════ ΑΠΑΝΤΗΣΗ ΠΡΟΣ ΠΟΛΙΤΗ ═══════════ -->
+<div class="overlay" id="creplyModal" style="display:none" onclick="closeBg(event,'creplyModal')">
+  <div class="modal sm">
+    <div class="mhdr"><h2>💬 Απάντηση προς τον πολίτη</h2><button class="mclose" onclick="closeM('creplyModal')">✕</button></div>
+    <div class="mbody">
+      <div id="cr_target" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:14px;line-height:1.6;"></div>
+      <div class="fg"><label>Θέμα</label><input type="text" id="cr_subject" maxlength="240"></div>
+      <div class="fg"><label>Μήνυμα <span class="req-star">*</span></label><textarea id="cr_body" rows="7" style="min-height:130px;"></textarea></div>
+      <div class="fg">
+        <label>📎 Συνημμένο</label>
+        <input type="file" id="cr_file" multiple
+               accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.zip"
+               onchange="creplyPickFiles(this.files)" style="display:none;">
+        <button type="button" class="btn" style="width:100%;" onclick="document.getElementById('cr_file').click()">📎 Επιλογή αρχείων</button>
+        <div id="cr_attList" style="margin-top:8px;font-size:12px;"></div>
+      </div>
+      <input type="hidden" id="cr_issueId">
+    </div>
+    <div class="mfoot" style="flex-wrap:wrap;gap:8px;">
+      <button class="btn" onclick="closeM('creplyModal')">Ακύρωση</button>
+      <button class="btn" id="cr_viberBtn" style="background:#7360f2;color:#fff;border-color:#7360f2;" onclick="creplySendDeepLink('viber')">📲 Viber</button>
+      <button class="btn" id="cr_whatsBtn" style="background:#25D366;color:#fff;border-color:#25D366;" onclick="creplySendDeepLink('whatsapp')">💬 WhatsApp</button>
+      <button class="btn btn-p" id="cr_emailBtn" onclick="creplySendEmail()">✉ Αποστολή Email</button>
+    </div>
   </div>
 </div>
 
@@ -4464,7 +4495,7 @@ function renderIssues(){
             ?'<br><span style="font-size:10px;font-weight:600;color:#2d5a8a;" title="Ημ. αιτήματος Δήμου">🏛 '+fmtDate(i.municipalDate)+'</span>'
             :''}
         </td>
-        <td>${i.source==='citizen'?'<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700;margin-right:3px;">👤 ΠΟΛΙΤΗΣ</span>':''}<strong>${esc(i.title)}</strong> ${dangerTag}${i.attachments&&i.attachments.length?'<span style="font-size:10px;color:var(--navy);font-weight:600;"> 📎'+i.attachments.length+'</span>':''}<br><span style="font-size:10px;color:var(--muted)">📍${esc(i.location)}</span>${i.source==='citizen'&&i.contactInfo?'<br><span style="font-size:10px;color:#16a34a;font-weight:600;">'+esc(i.contactInfo)+'</span>':''}</td>
+        <td>${i.source==='citizen'?'<span style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:3px;padding:1px 5px;font-size:9px;font-weight:700;margin-right:3px;">👤 ΠΟΛΙΤΗΣ</span>':''}<strong>${esc(i.title)}</strong> ${dangerTag}${i.attachments&&i.attachments.length?'<span style="font-size:10px;color:var(--navy);font-weight:600;"> 📎'+i.attachments.length+'</span>':''}<br><span style="font-size:10px;color:var(--muted)">📍${esc(i.location)}</span>${i.source==='citizen'&&i.contactInfo?'<br><span style="font-size:10px;color:#16a34a;font-weight:600;">'+esc(i.contactInfo)+'</span>'+citizenReplyBtn(i):''}</td>
         <td><span class="cat-tag">${esc(i.category)}</span></td>
         <td><span class="prio ${prioClass(i.priority)}" title="${prioResp(i.priority)}">${i.priority.slice(0,6)}</span></td>
         <td><span class="sbadge ${statusClass(i.status)}">${i.status}</span></td>
@@ -6115,6 +6146,36 @@ function viewIssueDetail(id){
   });
   html += '</div>';
 
+  // Απάντηση προς τον πολίτη — μόνο εφόσον την έχει ζητήσει
+  const _chs=citizenReplyChannels(i);
+  if(_chs.length){
+    const labels={email:'✉ Email',viber:'📲 Viber',whatsapp:'💬 WhatsApp'};
+    html += '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:10px;margin-bottom:10px;">'
+      +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+      +'<div style="flex:1;min-width:150px;font-size:11px;color:#166534;">'
+      +'<strong>Ο πολίτης ζήτησε απάντηση</strong><br>'
+      +'<span style="font-size:10px;">'+_chs.map(c=>labels[c]||c).join(' · ')+'</span></div>'
+      +'<button class="btn btn-sm" style="background:#16a34a;color:#fff;border-color:#16a34a;" '
+      +'onclick="openCitizenReply(\''+i.id+'\')">💬 Απάντηση</button></div>';
+
+    const _reps=Array.isArray(i.replies)?i.replies:[];
+    if(_reps.length){
+      html += '<div style="margin-top:10px;font-size:10px;color:var(--muted);">📨 Απεσταλμένες απαντήσεις</div>';
+      html += _reps.slice().reverse().map(r=>
+        '<div class="crep-row" style="margin-top:6px;">'
+        +'<div style="color:var(--muted);font-size:10px;">'
+        + (labels[r.channel]||esc(r.channel||''))
+        + (r.via==='deeplink'?' <em>(άνοιξε στη συσκευή)</em>':'')
+        + ' · '+esc(fmtDate((r.at||'').slice(0,10)))
+        + (r.by?' · '+esc(r.by):'')
+        + (r.attachments&&r.attachments.length?' · 📎'+r.attachments.length:'')
+        +'</div>'
+        +'<div style="white-space:pre-wrap;margin-top:3px;">'+esc(String(r.text||'').slice(0,600))+'</div>'
+        +'</div>').join('');
+    }
+    html += '</div>';
+  }
+
   // Description — big text
   if(i.description){
     html += '<div style="background:var(--sec);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:10px;">'
@@ -6256,6 +6317,16 @@ async function saveIssue(){
     issueNum: _issueNum,
     createdAt: id ? (_existingIssue?.createdAt || new Date().toISOString()) : new Date().toISOString(),
     source: id ? (_existingIssue?.source||'staff') : 'staff',  // v9.19.8: τα αιτήματα πολιτών έρχονται με source='citizen' από το citizen-bridge και διατηρείται στην επεξεργασία
+    // Πεδία που ανήκουν στον πολίτη και ΔΕΝ υπάρχουν στη φόρμα του υπαλλήλου.
+    // Χωρίς αυτά, μια απλή επεξεργασία από υπάλληλο τα έσβηνε: ο πολίτης έχανε
+    // τον κωδικό του και το αίτημα εξαφανιζόταν από τη λίστα του (η citizen-bridge
+    // φιλτράρει με createdByUid).
+    citizenRef: id ? (_existingIssue?.citizenRef || '') : '',
+    modifiesRef: id ? (_existingIssue?.modifiesRef ?? null) : null,
+    ...(id && _existingIssue?.createdByUid ? {createdByUid:_existingIssue.createdByUid} : {}),
+    replyOptIn: id ? !!_existingIssue?.replyOptIn : false,
+    replyChannels: id && Array.isArray(_existingIssue?.replyChannels) ? _existingIssue.replyChannels : [],
+    replies: id && Array.isArray(_existingIssue?.replies) ? _existingIssue.replies : [],
     date:_date,
     time:document.getElementById('i_time')?.value||'',
     receiptMethod:document.getElementById('i_receipt').value,
@@ -7321,6 +7392,188 @@ async function doSendEmail(){
 function closeEconf(){
   document.getElementById('econfWrap').style.display='none';
   _emailOrderId=null;
+}
+
+// ════════════════════════════════════════════════════════════════
+// ΑΠΑΝΤΗΣΗ ΠΡΟΣ ΤΟΝ ΠΟΛΙΤΗ
+// Email  -> πραγματική αποστολή από τον διακομιστή (send-citizen-reply).
+// Viber / WhatsApp -> deep link· ανοίγει η εφαρμογή του υπαλλήλου με το
+//   κείμενο έτοιμο. Τα συνημμένα μπαίνουν ως σύνδεσμοι λήψης, γιατί τα
+//   deep links δεν μεταφέρουν αρχεία.
+// ════════════════════════════════════════════════════════════════
+let _creplyAtts=[];
+
+function citizenReplyChannels(i){
+  return (i && i.replyOptIn===true && Array.isArray(i.replyChannels)) ? i.replyChannels : [];
+}
+
+// Το κουμπί εμφανίζεται ΜΟΝΟ αν ο πολίτης ζήτησε ρητά απάντηση.
+function citizenReplyBtn(i){
+  if(!citizenReplyChannels(i).length) return '';
+  return '<button class="reply-dot" title="Απάντηση προς τον πολίτη" '
+       + 'onclick="event.stopPropagation();openCitizenReply(\''+i.id+'\')">💬</button>';
+}
+
+function _creplyAuthor(){
+  return (currentUser && (currentUser.name||currentUser.username)) || '';
+}
+
+function _setCreplyBtn(id,on){
+  const b=document.getElementById(id); if(!b) return;
+  b.disabled=!on; b.style.display=on?'':'none';
+}
+
+function openCitizenReply(id){
+  const i=issues.find(x=>x.id===id);
+  if(!i){ toast('Το αίτημα δεν βρέθηκε.'); return; }
+  const chs=citizenReplyChannels(i);
+  if(!chs.length){ toast('Ο πολίτης δεν ζήτησε απάντηση για αυτό το αίτημα.'); return; }
+
+  _creplyAtts=[]; renderCreplyAtts();
+  document.getElementById('cr_issueId').value=id;
+  document.getElementById('cr_subject').value='Απάντηση στο αίτημά σας'+(i.citizenRef?' #'+i.citizenRef:'');
+  document.getElementById('cr_body').value=
+      'Αγαπητέ/ή '+(i.citizenName||'κύριε/κυρία')+',\n\n'
+    + 'Σχετικά με το αίτημά σας'+(i.citizenRef?' #'+i.citizenRef:'')
+    + (i.title?' («'+i.title+'»)':'')+(i.location?', '+i.location:'')+':\n\n'
+    + '\n\nΜε εκτίμηση,\nΔήμος Ρόδου';
+
+  const phone=cleanPhone(i.citizenMobile||i.citizenPhone||'');
+  const rows=['<strong>Πολίτης:</strong> '+esc(i.citizenName||'—'),
+              '<strong>Αίτημα:</strong> #'+esc(i.citizenRef||i.issueNum||'—')];
+  if(chs.indexOf('email')>=0)  rows.push('<strong>✉ Email:</strong> '+esc(i.citizenEmail||'—'));
+  if(chs.indexOf('viber')>=0||chs.indexOf('whatsapp')>=0) rows.push('<strong>📱 Κινητό:</strong> '+esc(phone||'—'));
+  document.getElementById('cr_target').innerHTML=rows.join('<br>');
+
+  _setCreplyBtn('cr_emailBtn', chs.indexOf('email')>=0 && !!i.citizenEmail);
+  _setCreplyBtn('cr_viberBtn', chs.indexOf('viber')>=0 && !!phone);
+  _setCreplyBtn('cr_whatsBtn', chs.indexOf('whatsapp')>=0 && !!phone);
+
+  document.getElementById('creplyModal').style.display='flex';
+}
+
+function renderCreplyAtts(){
+  const el=document.getElementById('cr_attList'); if(!el) return;
+  if(!_creplyAtts.length){ el.innerHTML=''; return; }
+  el.innerHTML=_creplyAtts.map((a,idx)=>
+    '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;">'
+    + '<span style="flex:1;">'+(a.uploading?'⏳ ':'📎 ')+esc(a.name)+'</span>'
+    + (a.uploading?'':'<button class="btn btn-sm" style="padding:1px 6px;" onclick="creplyRemoveAtt('+idx+')">✕</button>')
+    + '</div>').join('');
+}
+
+function creplyRemoveAtt(idx){ _creplyAtts.splice(idx,1); renderCreplyAtts(); }
+
+async function creplyPickFiles(files){
+  const sb=getSupabase();
+  if(!sb){ toast('❌ Η βάση δεν έχει ρυθμιστεί.'); return; }
+  for(const file of Array.from(files||[])){
+    if(file.size>20*1024*1024){ toast('❌ «'+file.name+'»: πάνω από 20MB.'); continue; }
+    const entry={name:file.name,size:file.size,type:file.type,uploading:true};
+    _creplyAtts.push(entry); renderCreplyAtts();
+    try{
+      const path='replies/'+Date.now()+'_'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const {error}=await sb.storage.from('attachments').upload(path,file,
+        {cacheControl:'3600',upsert:false,contentType:file.type||'application/octet-stream'});
+      if(error) throw error;
+      const {data:{publicUrl}}=sb.storage.from('attachments').getPublicUrl(path);
+      entry.url=publicUrl; entry.path=path; entry.uploading=false;
+    }catch(e){
+      _creplyAtts=_creplyAtts.filter(a=>a!==entry);
+      toast('❌ Αποτυχία μεταφόρτωσης: '+((e&&e.message)||e));
+    }
+    renderCreplyAtts();
+  }
+  document.getElementById('cr_file').value='';
+}
+
+async function creplySendEmail(){
+  if(_creplyAtts.some(a=>a.uploading)){ toast('⏳ Περιμένετε να ολοκληρωθεί η μεταφόρτωση.'); return; }
+  const issueId=document.getElementById('cr_issueId').value;
+  const text=document.getElementById('cr_body').value.trim();
+  if(!text){ toast('Γράψτε το μήνυμα.'); return; }
+
+  const btn=document.getElementById('cr_emailBtn');
+  const old=btn.textContent; btn.disabled=true; btn.textContent='⏳ Αποστολή...';
+  try{
+    const sb=getSupabase();
+    if(!sb) throw new Error('Η βάση δεν έχει ρυθμιστεί.');
+    const sessionRes=await sb.auth.getSession();
+    const session=sessionRes && sessionRes.data && sessionRes.data.session;
+    const accessToken=session && session.access_token;
+    if(!accessToken) throw new Error('Δεν υπάρχει ενεργή σύνδεση. Συνδεθείτε ξανά.');
+
+    const sbUrl=String(SUPABASE_URL||'').replace(/\/+$/,'');
+    const subject=document.getElementById('cr_subject').value;
+    const atts=_creplyAtts.filter(a=>a.url).map(a=>({name:a.name,url:a.url,type:a.type}));
+
+    const response=await fetch(sbUrl+'/functions/v1/send-citizen-reply',{
+      method:'POST', mode:'cors',
+      headers:{'Content-Type':'application/json','apikey':String(SUPABASE_KEY||'').trim(),
+               'Authorization':'Bearer '+accessToken,'x-client-info':'rodios-web'},
+      body:JSON.stringify({issueId:issueId, subject:subject, body:text, attachments:atts})
+    });
+    let raw=''; try{ raw=await response.text(); }catch(_){ raw=''; }
+    let res=null; try{ res=raw?JSON.parse(raw):null; }catch(_){ res={raw:raw}; }
+    if(!response.ok || !res || !res.ok){
+      throw new Error((res&&(res.error||res.message||res.raw))||('Η Edge Function απάντησε με HTTP '+response.status));
+    }
+
+    // Ο διακομιστής έγραψε ήδη το ιστορικό στη βάση. Ενημερώνουμε μόνο το
+    // τοπικό αντίγραφο — ΧΩΡΙΣ saveNow(), για να μην το ξαναγράψουμε από πάνω.
+    const idx=issues.findIndex(x=>x.id===issueId);
+    if(idx>=0){
+      const prev=Array.isArray(issues[idx].replies)?issues[idx].replies:[];
+      issues[idx].replies=prev.concat([{at:new Date().toISOString(),channel:'email',
+        to:res.to||'',by:_creplyAuthor(),subject:subject,text:text.slice(0,4000),
+        attachments:atts.map(a=>a.name)}]);
+    }
+    toast('✅ Το email στάλθηκε στον πολίτη.');
+    closeM('creplyModal');
+    if(typeof renderIssues==='function') renderIssues();
+  }catch(e){
+    alert('❌ Η αποστολή απέτυχε.\n\n'+((e&&e.message)||e));
+  }finally{
+    btn.disabled=false; btn.textContent=old;
+  }
+}
+
+function creplySendDeepLink(channel){
+  if(_creplyAtts.some(a=>a.uploading)){ toast('⏳ Περιμένετε να ολοκληρωθεί η μεταφόρτωση.'); return; }
+  const issueId=document.getElementById('cr_issueId').value;
+  const i=issues.find(x=>x.id===issueId);
+  if(!i){ toast('Το αίτημα δεν βρέθηκε.'); return; }
+  const phone=cleanPhone(i.citizenMobile||i.citizenPhone||'');
+  if(!phone){ toast('Δεν υπάρχει κινητό για αυτό το αίτημα.'); return; }
+  let msg=document.getElementById('cr_body').value.trim();
+  if(!msg){ toast('Γράψτε το μήνυμα.'); return; }
+
+  const links=_creplyAtts.filter(a=>a.url);
+  if(links.length) msg+='\n\n📎 Συνημμένα:\n'+links.map(a=>a.name+': '+a.url).join('\n');
+
+  let url;
+  if(channel==='viber') url='viber://chat?number='+encodeURIComponent(phone)+'&text='+encodeURIComponent(msg);
+  else url='https://wa.me/'+phone.replace(/^\+/,'')+'?text='+encodeURIComponent(msg);
+  window.open(url,'_blank');
+
+  logCitizenReply(issueId, channel, msg, links.map(a=>a.name));
+  toast((channel==='viber'?'📲 Το Viber':'💬 Το WhatsApp')+' άνοιξε για '+phone);
+  closeM('creplyModal');
+}
+
+// Το deep link ΔΕΝ επιβεβαιώνει αποστολή — καταγράφεται ως «άνοιξε».
+async function logCitizenReply(issueId, channel, text, names){
+  const idx=issues.findIndex(x=>x.id===issueId);
+  if(idx<0) return;
+  const prev=Array.isArray(issues[idx].replies)?issues[idx].replies:[];
+  issues[idx].replies=prev.concat([{
+    at:new Date().toISOString(), channel:channel, via:'deeplink',
+    to:issues[idx].citizenMobile||'', by:_creplyAuthor(),
+    text:String(text).slice(0,4000), attachments:names||[]
+  }]).slice(-50);
+  try{ await saveNow(); }
+  catch(e){ console.warn('[rodios] reply log failed', e); }
+  if(typeof renderIssues==='function') renderIssues();
 }
 
 function cleanPhone(phone){
