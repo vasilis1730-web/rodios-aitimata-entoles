@@ -4,6 +4,12 @@ import {getSupabaseSecretKey, handleOptions, json} from '../_shared/http.ts';
 
 const FIREBASE_PROJECT_ID = Deno.env.get('FIREBASE_PROJECT_ID') || 'dimosrodou-otp';
 const FIREBASE_CERTS_URL = 'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com';
+// Τα δημόσια κλειδιά της Google αλλάζουν σπάνια. Χωρίς cache, κάθε υποβολή
+// πολίτη περίμενε ένα ταξίδι στο googleapis.com — και έπεφτε μαζί του.
+type CertCache = {certs: Record<string, string>; expiresAt: number};
+let certCache: CertCache | null = null;
+let lastCertFetch = 0;
+
 const ALLOWED_TYPES = new Set([
   'image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'video/mp4', 'video/quicktime',
   'text/plain', 'application/octet-stream', 'application/msword',
@@ -13,14 +19,31 @@ const ALLOWED_TYPES = new Set([
 
 type FirebaseClaims = JWTPayload & {phone_number?: string; auth_time?: number};
 
+async function fetchCertificates(): Promise<Record<string, string>> {
+  const response = await fetch(FIREBASE_CERTS_URL);
+  if(!response.ok) throw new Error('firebase_keys_unavailable');
+  const certs = await response.json() as Record<string, string>;
+  const maxAge = Number((response.headers.get('cache-control') || '').match(/max-age=(\d+)/i)?.[1] || 3600);
+  certCache = {certs, expiresAt: Date.now() + Math.min(Math.max(maxAge, 60), 21600) * 1000};
+  lastCertFetch = Date.now();
+  return certs;
+}
+
+async function certificateFor(kid: string): Promise<string> {
+  const cached = certCache && certCache.expiresAt > Date.now() ? certCache.certs[kid] : undefined;
+  if(cached) return cached;
+  // Άγνωστο kid ή ληγμένο cache: μία ανανέωση, το πολύ μία ανά λεπτό, ώστε ένα
+  // πλαστό kid να μην μπορεί να μας βάλει να χτυπάμε τη Google συνέχεια.
+  if(certCache && Date.now() - lastCertFetch < 60_000) throw new Error('unknown_token_key');
+  const certificate = (await fetchCertificates())[kid];
+  if(!certificate) throw new Error('unknown_token_key');
+  return certificate;
+}
+
 async function verifyFirebaseToken(token: string): Promise<FirebaseClaims> {
   const header = decodeProtectedHeader(token);
   if(header.alg !== 'RS256' || !header.kid) throw new Error('invalid_token_header');
-  const response = await fetch(FIREBASE_CERTS_URL);
-  if(!response.ok) throw new Error('firebase_keys_unavailable');
-  const certificates = await response.json() as Record<string, string>;
-  const certificate = certificates[header.kid];
-  if(!certificate) throw new Error('unknown_token_key');
+  const certificate = await certificateFor(header.kid);
   const key = await importX509(certificate, 'RS256');
   const {payload} = await jwtVerify(token, key, {
     algorithms: ['RS256'],
@@ -95,7 +118,25 @@ function cleanReplyPreference(supplied: Record<string, unknown>): {
   return {optIn: final.length > 0, channels: final, email};
 }
 
+// Ίδια αρχή με τον νεότερο κώδικα του ΡΟΔΙΟΣ (rodios-staff-auth.ts): αίτημα
+// χωρίς Origin περνάει, αίτημα από άγνωστη σελίδα κόβεται.
+const DEFAULT_ORIGIN = 'https://vasilis1730-web.github.io';
+
+function originAllowed(req: Request): boolean {
+  const origin = req.headers.get('origin') || '';
+  if(!origin) return true;
+  const extra = (Deno.env.get('RODIOS_ALLOWED_ORIGINS') || '').split(',').map(x => x.trim()).filter(Boolean);
+  return new Set([DEFAULT_ORIGIN, ...extra]).has(origin);
+}
+
+// Όρια ανά ώρα και ανά πολίτη. Πολύ πάνω από κάθε κανονική χρήση, αρκετά
+// χαμηλά ώστε ένα script να μη γεμίσει τη βάση ή το Storage.
+const HOURLY_QUOTAS: Record<string, number> = {
+  'submit': 20, 'create-upload': 60, 'update': 60, 'list': 240
+};
+
 Deno.serve(async (req: Request) => {
+  if(!originAllowed(req)) return json({ok: false, error: 'origin_not_allowed'}, 403);
   const options = handleOptions(req);
   if(options) return options;
   if(req.method !== 'POST') return json({ok: false, error: 'method_not_allowed'}, 405);
@@ -115,6 +156,15 @@ Deno.serve(async (req: Request) => {
   const phone = String(claims.phone_number);
   const action = String(body.action || '');
   const service = createClient(supabaseUrl, serviceKey, {auth: {persistSession: false, autoRefreshToken: false}});
+
+  const quota = HOURLY_QUOTAS[action];
+  if(quota !== undefined) {
+    const {data: allowed, error: quotaError} = await service.rpc('rodios_consume_edge_quota', {
+      p_scope: `citizen-bridge:${action}`, p_actor_key: uid, p_limit: quota
+    });
+    if(quotaError) return json({ok: false, error: 'rate_limit_unavailable'}, 503);
+    if(allowed !== true) return json({ok: false, error: 'too_many_requests'}, 429);
+  }
 
   if(action === 'create-upload') {
     const contentType = String(body.contentType || '').toLowerCase();
